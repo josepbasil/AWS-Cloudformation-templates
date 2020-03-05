@@ -1,0 +1,201 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Multiple Security Groups - Demo
+Parameters: 
+  KeyName:
+    Description: Name of SSH KeyPair
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: Provide the name of an existing SSH key pair
+  
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+      - Key: Name
+        Value: Multi Security Group
+  WebSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-south-1a
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.0.0/24
+      Tags:
+      - Key: WebApplication
+        Value: My Web Stack
+          
+  APPSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-south-1b
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.1.0/24
+      Tags:
+      - Key: Application
+        Value: My Application Stack
+                
+  
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Application
+        Value: 
+          Ref: AWS::StackId
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway        
+  WebServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for the Web Server
+      VpcId:
+        Ref: VPC
+      SecurityGroupEgress:
+      - IpProtocol: "-1"
+        CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0
+        FromPort: '80'
+        ToPort: '80'
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0
+        FromPort: '443'
+        ToPort: '443'
+  AppServerSGIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Ref: AppServerSG
+      IpProtocol: tcp
+      CidrIp: 0.0.0.0/0
+      FromPort: '9090'
+      ToPort: '9090'
+  AppServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for the App Server
+      VpcId:
+        Ref: VPC
+      SecurityGroupEgress:
+      - IpProtocol: "-1"
+        CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0
+        FromPort: '8080'
+        ToPort: '8080'
+  
+  SimpleConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+       ImageId: ami-01e074f40dfb9999d
+       InstanceType: t2.micro
+       SecurityGroups:
+       - Ref: WebServerSG
+       - Ref: AppServerSG
+  WebServerGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - Ref: WebSubnet
+        - Ref: APPSubnet 
+       
+      LaunchConfigurationName: !Ref 'SimpleConfig'
+      MinSize: '1'
+      MaxSize: '2'
+           
+  WebServerScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref 'WebServerGroup'
+    
+  WebServerScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref 'WebServerGroup'
+      Cooldown: '60'
+      ScalingAdjustment: 1
+  WebServerScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref 'WebServerGroup'
+      Cooldown: '60'
+      ScalingAdjustment: -1
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Scale-up if CPU > 90% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 90
+      AlarmActions: [!Ref 'WebServerScaleUpPolicy']
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref 'WebServerGroup'
+      ComparisonOperator: GreaterThanThreshold
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Scale-down if CPU < 70% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 70
+      AlarmActions: [!Ref 'WebServerScaleDownPolicy']
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref 'WebServerGroup'
+      ComparisonOperator: LessThanThreshold
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets: 
+        
+        - Ref: WebSubnet
+        - Ref: APPSubnet 
+        
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: ALBTargetGroup
+      LoadBalancerArn:
+        Ref: ApplicationLoadBalancer
+      Port: '80'
+      Protocol: HTTP  
+      
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+       HealthCheckIntervalSeconds: 30
+       HealthCheckTimeoutSeconds: 5
+       HealthyThresholdCount: 3
+       Port: 80
+       Protocol: HTTP
+       UnhealthyThresholdCount: 5
+       VpcId:
+         Ref: VPC
+        
+          
+        
+        
+Outputs: {}

@@ -1,0 +1,35 @@
+--- 
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template to create an EC2 instance and enable SSH
+Parameters: 
+  KeyName: 
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance.
+    Type: 'AWS::EC2::KeyPair::KeyName'
+
+Resources:	
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-01e074f40dfb9999d
+      KeyName: !Ref KeyName
+      SecurityGroups:
+       - Ref: InstanceSecurityGroup
+      Tags:
+      - Key: Name
+        Value: My CF Instance
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 0.0.0.0/0
+          
+Outputs: 
+  InstanceID:
+    Description: The Instance ID
+    Value: !Ref MyEC2Instance	  
