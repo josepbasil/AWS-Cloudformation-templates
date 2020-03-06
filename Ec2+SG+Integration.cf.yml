@@ -1,0 +1,82 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Multiple Security Groups - Demo
+Parameters: 
+  KeyName:
+    Description: Name of SSH KeyPair
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: Provide the name of an existing SSH key pair
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+      - Key: Name
+        Value: Multi Security Group
+  WebSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.10.0/24
+      Tags:
+      - Key: Application
+        Value: Multi SG Subnet
+  WebServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for the Web Server
+      VpcId:
+        Ref: VPC
+      SecurityGroupEgress:
+      - IpProtocol: "-1"
+        CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0
+        FromPort: '80'
+        ToPort: '80'
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0
+        FromPort: '443'
+        ToPort: '443'
+  AppServerSGIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Ref: AppServerSG
+      IpProtocol: tcp
+      CidrIp: 0.0.0.0/0
+      FromPort: '9090'
+      ToPort: '9090'
+  AppServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for the App Server
+      VpcId:
+        Ref: VPC
+      SecurityGroupEgress:
+      - IpProtocol: "-1"
+        CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0
+        FromPort: '8080'
+        ToPort: '8080'
+  MultiSGInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-01e074f40dfb9999d
+      KeyName: !Ref KeyName
+    
+      SecurityGroupIds:
+      - Ref: WebServerSG
+      - Ref: AppServerSG
+      InstanceType: t2.micro
+      SubnetId:
+        Ref: WebSubnet
+      Tags:
+      - Key: Name
+        Value: MultiSG
+Outputs: {}
